@@ -33,6 +33,7 @@ References:
 
 [chinese-english translation] (https://www.kaggle.com/iuga77/talkingdata-mobile-user-demographics/translate-brand-names-snippet)
 
+[Another EDA] (https://www.kaggle.com/tonyliu/talkingdata-mobile-user-demographics/the-battle-of-smart-phones)
 
 [R-script-2.27] (https://www.kaggle.com/yibochen/talkingdata-mobile-user-demographics/xgboost-in-r-2-27217/code)
 

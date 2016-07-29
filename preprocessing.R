@@ -33,9 +33,7 @@ top100_app <- app_events %>%
   summarise(count=n()) %>%
   ungroup() %>%
   arrange(desc(count))
-
 top100_app <- top100_app[1:100,]
-
 device_app <- app_events %>%
   filter(is_active == 1) %>%
   merge(events, ., by="event_id") %>%
@@ -43,29 +41,15 @@ device_app <- app_events %>%
   summarise(count=n()) %>%
   arrange(desc(count)) %>%
   filter(app_id %in% top100_app$app_id)
-
 device_app_wide <- dcast(data=device_app, device_id ~ app_id, value.var = "count", fill=0)
 
 
-# device_app$app_id <- factor(device_app$ app_id)
-# 
-# for(app_id in top100_app$app_id) {
-#   device_app <- cbind(device_app, x=0)
-#   names(device_app)[length(device_app)] <- app_id
-# }
-# device_app_wide <- device_app[!duplicated(device_app$device_id),]
-# for(app_id in unique(device_app$app_id)){
-#   device_app[, app_id] <- 
-# }
 
 # geo+temporal data
 events$timestamp <- strptime(events$timestamp, format="%Y-%m-%d %H:%M:%S")
 events$weekday <- weekdays(events$timestamp)
 events$hour <- as.numeric(format(events$timestamp, "%H"))
 events$date <- strftime(events$timestamp, format="%m%d")
-
-
-
 events <- events %>%
   select(-timestamp) %>%
   group_by(device_id) %>%
@@ -96,6 +80,8 @@ data.test <- merge(gender_age_test, phone_brand_device_model, by="device_id", al
 # app usage
 data.train <- merge(data.train, app_count, by="device_id", all.x=TRUE)
 data.test <- merge(data.test, app_count, by="device_id", all.x=TRUE)
+data.train <- merge(data.train, device_app_wide, by="device_id", all.x=TRUE)
+data.test <- merge(data.test, device_app_wide, by="device_id", all.x=TRUE)
 
 # geo+temporal data
 data.train <- merge(data.train, events, by="device_id", all.x=TRUE)
@@ -112,7 +98,7 @@ rm(app_count,
    label_categories,
    phone_brand_device_model,
    cn_en,
-   gender_age_train,
-   gender_age_test)
+   device_app,
+   device_app_wide)
 
 
