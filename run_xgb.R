@@ -4,17 +4,19 @@ library(Matrix)
 library(xgboost)
 
 ## This is the main function that runs xgboost (tree)
-run_xgb_tree <- function(dtrain, cv_or_clf, dtest=NULL, group_map=NULL) {
+run_xgb_tree <- function(train_sparse, cv_or_clf, test_sparse=NULL, group_map=NULL) {
   
   nclass <- 12
 
   param <- list(max.depth=5, eta=0.01, objective="multi:softprob", eval_metric="mlogloss",
                 num_class=nclass, booster="gbtree")
   
+  dtrain <- xgb.DMatrix(data=train_sparse, label=data.train$group, missing=-9999)
+  
   if(cv_or_clf == "cv") {
     cv <- xgb.cv(params=param,
                   data=dtrain,
-                  nrounds=1000,
+                  nrounds=1500,
                   nfold=5,
                   early.stop.round=100,
                   maximize=FALSE,
@@ -23,12 +25,18 @@ run_xgb_tree <- function(dtrain, cv_or_clf, dtest=NULL, group_map=NULL) {
                  nthread=24)
     
     return(cv)
+    
   } else if(cv_or_clf == "clf" & !is.null(dtest) & !is.null(group_map)) {
     clf <- xgb.train(params=param,
                      data=dtrain,
-                     nrounds=70,
-                     verbose=1,
-                     print.every.n = TRUE)
+                     verbose=2,
+                     print.every.n = TRUE,
+                     nrounds=1489,
+                     colsample_bytree=0.7,
+                     subsample=0.7,
+                     nthread=24)
+    
+    dtest <- xgb.DMatrix(data=test_sparse, missing=-9999)
     
     preds <- predict(clf, newdata=dtest)
     
@@ -46,12 +54,14 @@ run_xgb_tree <- function(dtrain, cv_or_clf, dtest=NULL, group_map=NULL) {
 }
 
 ## This is the function that runs xgboost (linear)
-run_xgb_linear <- function(dtrain, cv_or_clf, dtest=NULL, group_map=NULL) {
+run_xgb_linear <- function(train_sparse, cv_or_clf, test_sparse=NULL, group_map=NULL) {
   
   nclass <- 12
   
   param <- list(max.depth=5, eta=0.01, objective="multi:softprob", eval_metric="mlogloss",
                 num_class=nclass, booster="gblinear")
+  
+  dtrain <- xgb.DMatrix(data=train_sparse, label=data.train$group, missing=-9999)
   
   if(cv_or_clf == "cv") {
     cv <- xgb.cv(params=param,
@@ -76,6 +86,7 @@ run_xgb_linear <- function(dtrain, cv_or_clf, dtest=NULL, group_map=NULL) {
                      alpha=2,
                      nthread=24)
     
+    dtest <- xgb.DMatrix(data=test_sparse, missing=-9999)
     preds <- predict(clf, newdata=dtest)
     
     preds <- t(matrix(preds, nrow=nclass, ncol=length(preds)/nclass))
@@ -93,7 +104,7 @@ run_xgb_linear <- function(dtrain, cv_or_clf, dtest=NULL, group_map=NULL) {
 
 ## This function creates the matrix of train data in the correct format for xgboost
 ##
-create_dtrain <- function(data.train) {
+create_train_sparse <- function(data.train) {
   
   # throw away unnecessary columns
   data.train$age <- NULL
@@ -102,18 +113,18 @@ create_dtrain <- function(data.train) {
   data.train$device_model <- NULL
   
   # one-hot encoding
-  dummies <- dummyVars(~ phone_brand_en + day_mode, data=data.train)
+  dummies <- dummyVars(~ phone_brand_en, data=data.train)
   temp <- predict(dummies, newdata=data.train)
   data.train <- data.train %>%
-    select(-phone_brand_en, -day_mode) %>%
+    select(-phone_brand_en) %>%
     cbind(temp)
   
   # encode missing data
   data.train[is.na(data.train)] <- -9999
   
   # longitude and latitude as integer
-  data.train$longitude <- as.integer(data.train$longitude)
-  data.train$latitude <- as.integer(data.train$latitude)
+  # data.train$longitude <- as.integer(data.train$longitude)
+  # data.train$latitude <- as.integer(data.train$latitude)
   
   # group map to integer
   group_map <- data.frame(group=unique(data.train$group), group_num=unique(as.numeric(data.train$group) - 1))
@@ -126,14 +137,13 @@ create_dtrain <- function(data.train) {
   
   # create sparse matrix
   train.sparse <- sparse.model.matrix(group ~. -1, data=data.train[, -1])
-  dtrain <- xgb.DMatrix(data=train.sparse, label=data.train$group, missing=-9999)
   
-  dtrain
+  list(train.sparse, group_map)
 }
 
 
 ## This function creates the test data in the correct format for xgboost
-create_dtest <- function(data.test) {
+create_test_sparse <- function(data.test) {
   
   # throw away unnecessary columns
   data.test$phone_brand <- NULL
@@ -143,25 +153,25 @@ create_dtest <- function(data.test) {
   data.test$group <- -1
   
   # one-hot encoding
-  dummies <- dummyVars(~ phone_brand_en + day_mode, data=data.test)
+  dummies <- dummyVars(~ phone_brand_en, data=data.test)
   temp <- predict(dummies, newdata=data.test)
   data.test <- data.test %>%
-    select(-phone_brand_en, -day_mode) %>%
+    select(-phone_brand_en) %>%
     cbind(temp)
   
   # encode missing data
   data.test[is.na(data.test)] <- -9999
   
   # convert longitude and latitude to integer
-  data.test$longitude <- as.integer(data.test$longitude)
-  data.test$latitude <- as.integer(data.test$latitude)
+  # data.test$longitude <- as.integer(data.test$longitude)
+  # data.test$latitude <- as.integer(data.test$latitude)
   
   names(data.test) <- gsub("^-", "N_", names(data.test))
   names(data.test) <- gsub("^[0-9]", "P_\\1", names(data.test))
   
   # create sparse matrix
   test.sparse <- sparse.model.matrix(group ~. -1, data=data.test[, -1])
-  dtest <- xgb.DMatrix(data=test.sparse, missing=-9999)
   
-  dtest
+  
+  test.sparse
 }
