@@ -1,0 +1,136 @@
+---
+title: "Exploratory Data Analysis"
+author: "Kevin"
+date: "7/12/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(dplyr)
+library(plotly)
+
+gender_age_train <- read.csv("raw_data/gender_age_train.csv", colClasses = c("factor", "factor", "integer", "factor"))
+gender_age_test <- read.csv("raw_data/gender_age_test.csv", colClasses="factor")
+events <- read.csv("raw_data/events.csv", colClasses = c("integer", "factor", "factor", "numeric", "numeric"))
+app_events <- read.csv("raw_data/app_events.csv", colClasses = c("integer", "factor", "integer", "integer"))
+label_categories <- read.csv("raw_data/label_categories.csv")
+phone_brand_device_model <- read.csv("raw_data/phone_brand_device_model.csv", colClasses=c(rep("factor", 3)))
+app_labels <- read.csv("raw_data/app_labels.csv", colClasses=c("factor", "integer"))
+
+```
+
+## Key basic facts
+
+1. Event_id is unique (i.e. no repeats)
+
+
+References:
+
+[geolocation visualization] (https://www.kaggle.com/beyondbeneath/talkingdata-mobile-user-demographics/geolocation-visualisations/discussion)
+
+[chinese-english translation] (https://www.kaggle.com/iuga77/talkingdata-mobile-user-demographics/translate-brand-names-snippet)
+
+
+[R-script-2.27] (https://www.kaggle.com/yibochen/talkingdata-mobile-user-demographics/xgboost-in-r-2-27217/code)
+
+## What we want to achieve
+
+Format:
+
+* 1 device_id = 1 row
+* features: phone_brand, device_model, app_category, frequent lon/lat, time & day.
+
+Features:
+
+1. device properties: phone brand and device model
+2. geolocation:
+3. app usage: average count of active apps per device, average count of installed apps per device, top 3 most frequent apps per device
+
+## App Usage
+
+Does one event contain at least one active app?
+
+```{r }
+temp <- app_events %>%
+  group_by(event_id) %>%
+  summarise(active_count=max(is_active), avg_count=mean(is_active))
+
+# Answer: mostly, but not all.
+summary(temp)
+```
+
+## Geolocation
+
+
+Explore latitudes/ longitudes
+
+```{r}
+foo <- events %>%
+  group_by(device_id) %>%
+  summarise(lon_count=length(unique(longitude)), lat_count=length(unique(latitude)))
+
+table(abs(foo$lon_count - foo$lat_count))
+```
+
+
+Gender & Age groups based on geolocation
+
+```{r}
+events$timestamp <- strptime(events$timestamp, format="%Y-%m-%d %H:%M:%S")
+events$weekday <- weekdays(events$timestamp)
+events$hour <- as.numeric(format(events$timestamp, "%H"))
+
+data.train <- events %>%
+  select(-timestamp) %>%
+  group_by(device_id) %>%
+  summarise(longitude=max(longitude), latitude=max(latitude), day=weekday[which.max(table(weekday))], hour=hour[which.max(table(hour))]) %>%
+  merge(gender_age_train, ., by="device_id")
+ggplot(data.train, aes(x=longitude, y=latitude, col=group)) + geom_point(alpha=I(0.4))
+
+# visualizing the density
+ggplot(data.train, aes(x=longitude, y=latitude)) + geom_point(alpha=I(0.1))
+
+
+# 3-D plot with time component
+layout(plot_ly(data=data.train, x= longitude, y=latitude, z=hour, color=group, type='scatter3d', mode='markers'))
+```
+
+
+
+## Device Characteristics
+
+Gender & Age groups based on phone brand and device model
+
+```{r data setup, include=FALSE}
+phone_brand_device_model <- phone_brand_device_model[!duplicated(phone_brand_device_model$device_id),]
+cn_en <- read.csv("processed_data/cn_en.csv", stringsAsFactors = FALSE)
+cn_en$chinese <- enc2utf8(cn_en$chinese)
+phone_brand_device_model$phone_brand <- enc2utf8(as.character(phone_brand_device_model$phone_brand))
+phone_brand_device_model$phone_brand_en <- sapply(phone_brand_device_model$phone_brand, function(x){ifelse(any(grepl(x, cn_en$chinese, fixed=TRUE)),tolower(cn_en[grep(x, cn_en$chinese, fixed = TRUE), "english"]), x)})
+phone_brand_device_model$phone_brand_en <- gsub(" ", "", phone_brand_device_model$phone_brand_en)
+
+data.train <- merge(gender_age_train, phone_brand_device_model, by="device_id", all.x=TRUE)
+```
+
+First let's see the distribution of phone brands
+```{r}
+
+# Phone brand count
+barplot(sort(table(data.train$phone_brand), decreasing=TRUE)[1:10], horiz=TRUE,
+        las=1, main= "Phone Brand Count")
+
+# top age groups for every brand
+temp <- data.train %>%
+  group_by(phone_brand_en, group) %>%
+  summarise(count=n()) %>%
+  group_by(phone_brand_en) %>%
+  arrange(desc(count)) %>%
+  filter(count == max(count) & length(unique(count)) > 1) %>%
+  ungroup() %>%
+  arrange(desc(count))
+
+temp[1:10,]
+```
