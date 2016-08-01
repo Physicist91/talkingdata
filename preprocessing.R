@@ -27,49 +27,57 @@ app_count <- app_events %>%
             app_count=round(mean(app_count, na.rm=T)))
 
 # most frequent app
-top500_app <- app_events %>%
+top100_app <- app_events %>%
   filter(is_active == 1) %>%
   group_by(app_id) %>%
   summarise(count=n()) %>%
   ungroup() %>%
   arrange(desc(count))
-top500_app <- top500_app[1:500,]
+top100_app <- top100_app[1:100,]
 device_app <- app_events %>%
   filter(is_active == 1) %>%
   merge(events, ., by="event_id") %>%
   group_by(device_id, app_id) %>%
   summarise(count=n()) %>%
   arrange(desc(count)) %>%
-  filter(app_id %in% top500_app$app_id)
+  filter(app_id %in% top100_app$app_id)
 device_app_wide <- dcast(data=device_app, device_id ~ app_id, value.var = "count", fill=0)
 
 
 
-# geo+temporal data
-# events$timestamp <- strptime(events$timestamp, format="%Y-%m-%d %H:%M:%S")
-# events$weekday <- weekdays(events$timestamp)
-# events$hour <- as.numeric(format(events$timestamp, "%H"))
-# events$date <- strftime(events$timestamp, format="%m%d")
-# events <- events %>%
-#   select(-timestamp) %>%
-#   group_by(device_id) %>%
-#   summarise(longitude=median(longitude), latitude=median(latitude),
-#             day_mode=weekday[which.max(table(weekday))], hour_mode=hour[which.max(table(hour))],
-#             event_count=n(), date_count=length(unique(date)),
-#             event_per_day = event_count/date_count,
-#             day_count=length(unique(weekday)), hour_count=length(unique(hour)))
-# events[events$longitude == 0, "longitude"] <- NA
-# events[events$latitude == 0, "latitude"] <- NA
-
+#geo+temporal data
+events$timestamp <- strptime(events$timestamp, format="%Y-%m-%d %H:%M:%S")
+events$weekday <- weekdays(events$timestamp)
+events$hour <- as.numeric(format(events$timestamp, "%H"))
+events$date <- strftime(events$timestamp, format="%m%d")
+events <- events %>%
+  select(-timestamp) %>%
+  group_by(device_id) %>%
+  summarise(longitude=median(longitude), latitude=median(latitude),
+            day_mode=weekday[which.max(table(weekday))], hour_mode=hour[which.max(table(hour))],
+            event_count=n(), date_count=length(unique(date)),
+            event_per_day = event_count/date_count,
+            day_count=length(unique(weekday)), hour_count=length(unique(hour)))
+events[events$longitude == 0, "longitude"] <- NA
+events[events$latitude == 0, "latitude"] <- NA
+events$longitude <- as.integer(events$longitude)
+events$latitude <- as.integer(events$latitude)
 
 # Part 2: phone characteristics
 phone_brand_device_model <- phone_brand_device_model[!duplicated(phone_brand_device_model$device_id),]
 cn_en <- read.csv("processed_data/cn_en.csv", stringsAsFactors = FALSE)
 cn_en$chinese <- enc2utf8(cn_en$chinese)
 phone_brand_device_model$phone_brand <- enc2utf8(as.character(phone_brand_device_model$phone_brand))
+phone_brand_device_model$device_model <- enc2utf8(as.character(phone_brand_device_model$device_model))
 phone_brand_device_model$phone_brand_en <- sapply(phone_brand_device_model$phone_brand, function(x){ifelse(any(grepl(x, cn_en$chinese, fixed=TRUE)),toupper(cn_en[grep(x, cn_en$chinese, fixed = TRUE), "english"]), "Others")})
 phone_brand_device_model$phone_brand_en <- gsub(" ", "", phone_brand_device_model$phone_brand_en)
 
+phone_brand_device_model <- merge(phone_brand_device_model, gender_age_train, by="device_id", all.x=TRUE) %>%
+  group_by(device_model) %>%
+  summarise(model_male_count=sum(gender == "M", na.rm=TRUE),
+            model_female_count=sum(gender == "F", na.rm=TRUE),
+            model_average_age=mean(age, na.rm=TRUE)) %>%
+  merge(phone_brand_device_model, ., by="device_model", all.x=TRUE)
 
 ###################################
 # joining data
@@ -85,8 +93,8 @@ data.train <- merge(data.train, device_app_wide, by="device_id", all.x=TRUE)
 data.test <- merge(data.test, device_app_wide, by="device_id", all.x=TRUE)
 
 # geo+temporal data
-# data.train <- merge(data.train, events, by="device_id", all.x=TRUE)
-# data.test <- merge(data.test, events, by="device_id", all.x=TRUE)
+data.train <- merge(data.train, events, by="device_id", all.x=TRUE)
+data.test <- merge(data.test, events, by="device_id", all.x=TRUE)
 
 ####################################
 # Post-processing
@@ -102,4 +110,9 @@ rm(app_count,
    device_app,
    device_app_wide)
 
-
+data.train$gender <- NULL
+data.train$age <- NULL
+data.train$phone_brand <- NULL
+data.train$device_model <- NULL
+data.test$phone_brand <- NULL
+data.test$device_model <- NULL

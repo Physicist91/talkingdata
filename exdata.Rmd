@@ -63,6 +63,14 @@ temp <- app_events %>%
 summary(temp)
 ```
 
+
+How many apps are there?
+
+```{r}
+length(unique(app_events$app_id))
+
+```
+
 ## Geolocation
 
 
