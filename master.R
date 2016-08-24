@@ -1,24 +1,33 @@
-
 # Setup
+setwd("~/talkingdata")
 source("preprocessing.R")
 source("run_xgb.R")
 
-summary(data.train)
+summary(data.train1)
+summary(data.train2)
 
+# mapping categorical group to ordered integer 0 -12
+group_map <- read.csv("processed_data/group_map.csv")
+group_map
 
-# creating xgb.dmatrices
-train_list <- create_train_sparse(data.train)
-train_sparse <- train_list[[1]]
-group_map <- train_list[[2]]
-labels <- train_list[[3]]
-test_sparse <- create_test_sparse(data.test)
+data.train$group <- sapply(data.train$group, function(x) (group_map$group_num[group_map$group == x]))
+labels <- data.train$group
+
+# creating sparse matrices
+train_sparse <- create_sparse_matrix(data.train)
+test_sparse <- create_sparse_matrix(data.test)
 
 # run xgbcv
 cv <- run_xgb_tree(train_sparse, labels=labels, "cv")
-which.min(cv$test.mlogloss.mean + cv$test.mlogloss.std)
+best.n <- which.min(cv$test.mlogloss.mean + cv$test.mlogloss.std)
+#cv <- run_xgb_linear(train_sparse, labels=labels, "cv")
+
 
 # run xgboost
 preds <- run_xgb_tree(train_sparse, labels, "clf", test_sparse, group_map)
+
+# variable importance
+
 
 # append device_id to predictions
 preds$device_id <- data.test$device_id
