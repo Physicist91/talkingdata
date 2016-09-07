@@ -1,3 +1,5 @@
+# for linear model
+
 lambdas <- c(0, 1, 2, 3, 4, 5, 6)
 lambda_biases <- c(0, 1, 2, 3, 4, 5, 6)
 alphas <- c(0, 1, 2, 3, 4, 5, 6)
@@ -34,3 +36,37 @@ for(lambda in lambdas){
     }
   }
 }
+
+
+# for tree model
+
+max_depths <- c(3, 4, 5, 6, 7, 8, 9, 10, 11)
+
+output <- data.frame(max_depth=integer(), err=numeric(), n=integer())
+
+for(max_depth in max_depths) {
+      cat("Running xgb with ", max_depth, "\n")
+      param <- list(booster="gbtree",
+                    num_class=length(group_name),
+                    objective="multi:softprob",
+                    eval_metric="mlogloss",
+                    eta=0.07,
+                    max_depth=max_depth)
+      watchlist <- list(train=dtrain)
+      
+      set.seed(114)
+      fit_cv <- xgb.cv(params=param,
+                       data=dtrain,
+                       nrounds=100000,
+                       watchlist=watchlist,
+                       nfold=5,
+                       early.stop.round=3,
+                       verbose=0,
+                       maximize=FALSE)
+      best.err <- min(fit_cv$test.mlogloss.mean + fit_cv$test.mlogloss.std)
+      best.n <- which.min(fit_cv$test.mlogloss.mean + fit_cv$test.mlogloss.std)
+      temp <- data.frame(max_depth=max_depth, err=best.err, n=best.n)
+      output <- rbind(output, temp)
+    }
+
+

@@ -1,0 +1,49 @@
+---
+title: "deepdive"
+author: "Kevin"
+date: "8/30/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r }
+phone_brand_device_model <- read.csv("raw_data/phone_brand_device_model.csv", colClasses=c(rep("factor", 3)))
+
+gender_age_train <- read.csv("raw_data/gender_age_train.csv", colClasses = c("factor", "factor", "integer", "factor"))
+
+phone_info <- merge(gender_age_train, phone_brand_device_model, by="device_id")
+
+phone_info$phone_brand_device_model <- paste(phone_info$phone_brand, phone_info$device_model)
+
+phone_stats <- phone_info %>%
+  group_by(phone_brand_device_model) %>%
+  summarise(mean_age=mean(age, na.rm=TRUE),
+            median_age=median(age, na.rm=TRUE),
+            male_count=sum(gender == "M"),
+            female_count=sum(gender=="F"))
+
+phone_stats %>% arrange(desc(abs(mean_age - median_age))) %>% head(20)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+ggplot(phone_stats, aes(x=mean_age, y=median_age, col=phone_brand_device_model)) +
+  geom_point() +
+  theme(legend.position="none")
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

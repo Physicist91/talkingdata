@@ -188,38 +188,62 @@ train_label <- match(y[idx_train], group_name)-1
 test_label <- match(y[idx_test], group_name)-1
 dtrain <- xgb.DMatrix(train_data, label=train_label, missing=NA)
 dtest <- xgb.DMatrix(test_data, label=test_label, missing=NA)
+rm(x,y); gc()
+
+  param_linear <- list(booster="gblinear",
+                       num_class=length(group_name),
+                       objective="multi:softprob",
+                       eval_metric="mlogloss",
+                       eta=0.01,
+                       lambda=6,
+                       lambda_bias=5,
+                       alpha=2)
+  
+  param_tree <- list(booster="gbtree",
+                     num_class=length(group_name),
+                     objective="multi:softprob",
+                     eval_metric="mlogloss",
+                     eta=0.1, 
+                     max_depth=2,
+                     colsample_bytree=0.7,
+                     subsample=0.7)
+  
+  watchlist <- list(train=dtrain)
+  
+  # set.seed(114)
+  # fit_cv <- xgb.cv(params=param,
+  #                  data=dtrain,
+  #                  nrounds=100000,
+  #                  watchlist=watchlist,
+  #                  nfold=5,
+  #                  early.stop.round=3,
+  #                  verbose=1,
+  #                  maximize=FALSE)
+  # best.n <- which.min(fit_cv$test.mlogloss.mean + fit_cv$test.mlogloss.std)
+  best.ntree <- 735
+  best.nlinear <- 237
+  
+  set.seed(114)
+  fit_xgb_tree <- xgb.train(params=param_tree,
+                            data=dtrain,
+                            nrounds=best.ntree,
+                            watchlist=watchlist,
+                            verbose=1,
+                            nthread=24)
+  fit_xgb_linear <- xgb.train(params=param_linear,
+                              data=dtrain,
+                              nrounds=best.nlinear,
+                              watchlist=watchlist,
+                              verbose=1,
+                              nthread=24)
+  
+  
+  
+  
+  pred <- 0.6 * predict(fit_xgb_linear, dtest) + 0.4 * predict(fit_xgb_tree, dtest)
 
 
-param <- list(booster="gblinear",
-              num_class=length(group_name),
-              objective="multi:softprob",
-              eval_metric="mlogloss",
-              eta=0.01,
-              lambda=6,
-              lambda_bias=5,
-              alpha=2)
-watchlist <- list(train=dtrain)
-
-set.seed(114)
-fit_cv <- xgb.cv(params=param,
-                 data=dtrain,
-                 nrounds=100000,
-                 watchlist=watchlist,
-                 nfold=5,
-                 early.stop.round=3,
-                 verbose=1,
-                 maximize=FALSE)
-
-best.n <- which.min(fit_cv$test.mlogloss.mean + fit_cv$test.mlogloss.std)
-set.seed(114)
-fit_xgb <- xgb.train(params=param,
-                     data=dtrain,
-                     nrounds=best.n,
-                     watchlist=watchlist,
-                     verbose=1)
-
-
-pred <- predict(fit_xgb, dtest)
+# format submission and write to disk
 pred_detail <- t(matrix(pred, nrow=length(group_name)))
 res_submit <- cbind(id=id[idx_test],as.data.frame(pred_detail))
 colnames(res_submit) <- c("device_id", group_name)
